@@ -2,40 +2,40 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <time.h>
 
 //First available address for rom data
 static const int START_ADDRESS = 0x200;
-typedef struct {
-    uint8_t registers[16];
-    uint8_t memory[4096];
-    uint16_t index_reg;
-    uint16_t pc;
-    uint16_t stack[16];
-    uint8_t stack_ptr;
-    uint8_t delay_tmr;
-    uint16_t sound_tmr;
-    uint8_t keypad[16];
-    unsigned int video[64 * 32];
-    uint16_t opcode;
-} Chip8;
 
-void open_rom(FILE *rom, Chip8 *chip8) {
+static uint8_t registers[16];
+static uint8_t memory[4096];
+static uint16_t index_reg;
+static uint16_t pc;
+static uint16_t stack[16];
+static uint8_t stack_ptr;
+static uint8_t delay_tmr;
+static uint16_t sound_tmr;
+static uint8_t keypad[16];
+static unsigned int video[64 * 32];
+static uint16_t opcode;
+
+void open_rom(FILE *rom) {
     if (rom) {
         //For getting the size of the rom file
         fseek(rom, 0, SEEK_END);
         int size = ftell(rom);
         fseek(rom, 0, SEEK_SET);
 
-        //&chip8.memory is for writing starting at a certain position
+        //&memory is for writing starting at a certain position
         //(0x200) Represents the first memory address not occupied by the chip8 interpreter
-        fread(&chip8->memory[START_ADDRESS], sizeof(uint8_t), size, rom);
+        fread(&memory[START_ADDRESS], sizeof(uint8_t), size, rom);
 
         fclose(rom);
     }
 }
 
-void load_fontset(Chip8 *chip8) {
+void load_fontset() {
     const int FONTSET_SIZE = 80;
     const int FONTSET_START_ADDRESS = 0x050;
     //Each element represents a byte of binary in which you can see the character being "drawn", see docs for more info
@@ -59,7 +59,7 @@ void load_fontset(Chip8 *chip8) {
             0xF0, 0x80, 0xF0, 0x80, 0x80   // F
         };
     for (int i = 0; i < FONTSET_SIZE; i++) {
-        chip8->memory[FONTSET_START_ADDRESS + i] = fontset[i];
+        memory[FONTSET_START_ADDRESS + i] = fontset[i];
     }
 }
 
@@ -69,23 +69,45 @@ long capped_rng(int cap) {
     return random() % (cap + 1);
 }
 
-void emulateCycle() {
+void executeOpcode() {
+    //Removes all lower bits
+    switch (opcode & 0xF000) {
+        case 0x0000:
+            //Checks if lower nibble is different
+            switch (opcode & 0x000F) {
+                case 0x0000:
+                    memset(video, 0, sizeof(video));
+
+                case 0x000E:
+                    break;
+            }
+            break;
+
+        default:
+            printf("Unknown 0x0000 opcode: 0x%X", opcode);
+    }
 }
 
-void test_open_rom(Chip8 *chip8) {
-    //This is the same as 0x200 - 1
-    printf("%s %x\n", "Address 0x1FF (Should be empty):", chip8->memory[0x1FF]);
+void emulateCycle() {
+    //Gets the first half of a opcode, shifts to the left to make space and sets the second half using OR bitmask
+    opcode = (memory[pc] << 8) | memory[pc + 1];
+    pc += 2;
+}
 
-    printf("%s %x\n", "First rom address:", chip8->memory[START_ADDRESS]);
+void test_open_rom() {
+    //This is the same as 0x200 - 1
+    printf("%s %x\n", "Address 0x1FF (Should be empty):", memory[0x1FF]);
+
+    printf("%s %x\n", "First rom address:", memory[START_ADDRESS]);
 
     //Just my ass realizing an array's address is the same as its first element's address lol
     //printf("%s %u %u\n", "Address comp:", &chip8.memory, &chip8.memory[0]);
 
     int n = 4096;
     for (int i = 0; i < n; i++)
-        printf("%02X", chip8->memory[i]);
+        printf("%02X", memory[i]);
     printf("\n");
-    printf("Opcode??: %x\n", (chip8->memory[START_ADDRESS] << 8 | chip8->memory[START_ADDRESS + 1]));
+    printf("Opcode??: %x\n", (memory[START_ADDRESS] << 8 | memory[START_ADDRESS + 1]));
 }
 
 //Will test if generated numbers are between 0 and cap
@@ -104,16 +126,17 @@ bool test_rng(int cap, int iter, bool print) {
 
 //Sets up Chip8 object
 //Pass a chip8 address/reference to this function
-void setupChip8(Chip8 *chip8) {
+void setupChip8() {
     srandom(time(NULL));
     FILE *rom = fopen("/home/thoriumsnake/Code/Projects/Chip8/roms/c8_test.c8", "rb");
-    open_rom(rom, chip8);
-    load_fontset(chip8);
+    open_rom(rom);
+    load_fontset();
+    pc = START_ADDRESS;
 }
 
-void run_tests(Chip8 *chip8, bool run) {
+void run_tests(bool run) {
     if (run) {
-        test_open_rom(chip8);
+        test_open_rom();
         if (test_rng(256, 10000, false))
             printf("RNG Test success\n");
         else
@@ -122,7 +145,6 @@ void run_tests(Chip8 *chip8, bool run) {
 }
 
 int main() {
-    Chip8 chip8;
-    setupChip8(&chip8);
-    run_tests(&chip8, true);
+    setupChip8();
+    run_tests(true);
 }
