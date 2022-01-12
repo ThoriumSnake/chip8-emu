@@ -1,24 +1,42 @@
-#include <stdbool.h>
-#include <stdint.h>
+#include "chip8.h"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
 
+#include "instructions.h"
+
 //First available address for rom data
 static const int START_ADDRESS = 0x200;
+const int FONTSET_START_ADDRESS = 0x050;
 
-static uint8_t registers[16];
-static uint8_t memory[4096];
-static uint16_t index_reg;
-static uint16_t pc = START_ADDRESS;
-static uint16_t stack[16];
-static uint8_t stack_ptr = 0;
-static uint8_t delay_tmr;
-static uint16_t sound_tmr;
-static uint8_t keypad[16];
-static unsigned int video[64 * 32];
-static uint16_t opcode;
+uint8_t registers[16] = {0};
+uint8_t memory[4096];
+uint16_t index_reg = 0;
+uint16_t pc = START_ADDRESS;
+uint16_t stack[16] = {0};
+uint8_t stack_ptr = 0;
+uint8_t delay_tmr = 0;
+uint16_t sound_tmr = 0;
+bool keypad[16] = {0};
+unsigned int video[64 * 32];
+uint16_t opcode = 0;
+
+void open_rom(FILE *rom);
+void load_fontset();
+
+//Ignoring warning, as random() function is properly declared but warning is given anyway
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wimplicit-function-declaration"
+//Sets up Chip8 object
+//Pass a chip8 address/reference to this function
+void setupChip8(FILE *rom) {
+    srandom(time(NULL));
+    open_rom(rom);
+    load_fontset();
+}
+#pragma GCC diagnostic push
 
 void open_rom(FILE *rom) {
     if (rom) {
@@ -35,9 +53,8 @@ void open_rom(FILE *rom) {
     }
 }
 
-void load_fontset() {
+void load_fontset(void) {
     const int FONTSET_SIZE = 80;
-    const int FONTSET_START_ADDRESS = 0x050;
     //Each element represents a byte of binary in which you can see the character being "drawn", see docs for more info
     uint8_t fontset[] =
         {
@@ -63,22 +80,143 @@ void load_fontset() {
     }
 }
 
+//Ignoring warning, as random() function is properly declared but warning is given anyway
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wimplicit-function-declaration"
 //Generates a number between 0 and cap
 long capped_rng(int cap) {
     //Typically returns number between 0 and cap - 1
     return random() % (cap + 1);
 }
+#pragma GCC diagnostic pop
 
-void executeOpcode() {
+void executeOpcode(void) {
     //Removes all lower bits
     switch (opcode & 0xF000) {
+        //Checks for opcode categories
         case 0x0000:
             //Checks if lower nibble is different
             switch (opcode & 0x000F) {
-                case 0x0000:
-                    memset(video, 0, sizeof(video));
+                case 0x0000:  //CLS
+                    op_00E0();
+                    break;
 
+                case 0x000E:  //RET
+                    op_00EE();
+                    break;
+            }
+            break;
+
+        case 0x1000:  //JMP addr
+            op_1nnn();
+            break;
+        case 0x2000:  //CALL addr
+            op_2nnn();
+            break;
+        case 0x3000:  //SE Vx, byte
+            op_3xnn();
+            break;
+        case 0x4000:  //SNE Vx, byte
+            op_4xnn();
+            break;
+        case 0x5000:
+            op_5xy0();
+            break;
+        case 0x6000:
+            op_6xnn();
+            break;
+        case 0x7000:
+            op_7xnn();
+            break;
+
+        case 0x8000:
+            switch (opcode & 0x000F) {
+                case 0x0000:
+                    op_8xy0();
+                    break;
+                case 0x0001:
+                    op_8xy1();
+                    break;
+                case 0x0002:
+                    op_8xy2();
+                    break;
+                case 0x0003:
+                    op_8xy3();
+                    break;
+                case 0x0004:
+                    op_8xy4();
+                    break;
+                case 0x0005:
+                    op_8xy5();
+                    break;
+                case 0x0006:
+                    op_8xy6();
+                    break;
+                case 0x0007:
+                    op_8xy7();
+                    break;
                 case 0x000E:
+                    op_8xyE();
+                    break;
+            }
+            break;
+
+        case 0x9000:
+            op_9xy0();
+            break;
+        case 0xA000:
+            op_Annn();
+            break;
+        case 0xB000:
+            op_Bnnn();
+            break;
+        case 0xC000:
+            op_Cxnn();
+            break;
+        case 0xD000:
+            op_Dxyn();
+            break;
+
+        case 0xE000:
+            switch (opcode & 0x000F) {
+                case 0x000E:
+                    op_Ex9E();
+                    break;
+
+                case 0x0001:
+                    op_ExA1();
+                    break;
+            }
+            break;
+
+        case 0xF000:
+            switch (opcode & 0x00FF) {
+                case 0x0007:
+                    op_Fx07();
+                    break;
+                case 0x000A:
+                    op_Fx0A();
+                    break;
+                case 0x0015:
+                    op_Fx15();
+                    break;
+                case 0x0018:
+                    op_Fx18();
+                    break;
+                case 0x001E:
+                    op_Fx1E();
+                    break;
+                case 0x0029:
+                    op_Fx29();
+                    break;
+                case 0x0033:
+                    op_Fx33();
+                    break;
+                case 0x0055:
+                    op_Fx55();
+                    break;
+                case 0x0065:
+                    op_Fx65();
                     break;
             }
             break;
@@ -88,10 +226,15 @@ void executeOpcode() {
     }
 }
 
-void emulateCycle() {
+void emulateCycle(void) {
     //Gets the first half of a opcode, shifts to the left to make space and sets the second half using OR bitmask
     opcode = (memory[pc] << 8) | memory[pc + 1];
     pc += 2;
+
+    if (delay_tmr > 0)
+        delay_tmr--;
+    if (sound_tmr > 0)
+        sound_tmr--;
 }
 
 void test_open_rom() {
@@ -107,7 +250,6 @@ void test_open_rom() {
     for (int i = 0; i < n; i++)
         printf("%02X", memory[i]);
     printf("\n");
-    printf("Opcode??: %x\n", (memory[START_ADDRESS] << 8 | memory[START_ADDRESS + 1]));
 }
 
 //Will test if generated numbers are between 0 and cap
@@ -124,16 +266,6 @@ bool test_rng(int cap, int iter, bool print) {
     return true;
 }
 
-//Sets up Chip8 object
-//Pass a chip8 address/reference to this function
-void setupChip8() {
-    srandom(time(NULL));
-    FILE *rom = fopen("/home/thoriumsnake/Code/Projects/Chip8/roms/c8_test.c8", "rb");
-    open_rom(rom);
-    load_fontset();
-    pc = START_ADDRESS;
-}
-
 void run_tests(bool run) {
     if (run) {
         test_open_rom();
@@ -142,9 +274,4 @@ void run_tests(bool run) {
         else
             printf("RNG Test failed\n");
     }
-}
-
-int main() {
-    setupChip8();
-    run_tests(true);
 }
