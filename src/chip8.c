@@ -10,6 +10,8 @@
 //First available address for rom data
 static const int START_ADDRESS = 0x200;
 const int FONTSET_START_ADDRESS = 0x050;
+//For counting cycles in debugging
+static int cycle = 0;
 
 uint8_t registers[16] = {0};
 uint8_t memory[4096];
@@ -19,11 +21,11 @@ uint16_t stack[16] = {0};
 uint8_t stack_ptr = 0;
 uint8_t delay_tmr = 0;
 uint16_t sound_tmr = 0;
-bool keypad[16] = {0};
-unsigned int video[64 * 32];
+bool keypad[16] = {false};
+unsigned int video[VIDEO_WIDTH * VIDEO_HEIGHT] = {0};
 uint16_t opcode = 0;
 
-void open_rom(FILE *rom);
+int open_rom(FILE *rom);
 void load_fontset();
 
 //Ignoring warning, as random() function is properly declared but warning is given anyway
@@ -31,14 +33,17 @@ void load_fontset();
 #pragma GCC diagnostic ignored "-Wimplicit-function-declaration"
 //Sets up Chip8 object
 //Pass a chip8 address/reference to this function
-void setupChip8(FILE *rom) {
+int setupChip8(FILE *rom) {
     srandom(time(NULL));
-    open_rom(rom);
+    if (!open_rom(rom))
+        return false;
+
     load_fontset();
+    return true;
 }
 #pragma GCC diagnostic push
 
-void open_rom(FILE *rom) {
+int open_rom(FILE *rom) {
     if (rom) {
         //For getting the size of the rom file
         fseek(rom, 0, SEEK_END);
@@ -50,7 +55,9 @@ void open_rom(FILE *rom) {
         fread(&memory[START_ADDRESS], sizeof(uint8_t), size, rom);
 
         fclose(rom);
+        return true;
     }
+    return false;
 }
 
 void load_fontset(void) {
@@ -222,14 +229,15 @@ void executeOpcode(void) {
             break;
 
         default:
-            printf("Unknown 0x0000 opcode: 0x%X", opcode);
+            printf("Unknown opcode: 0x%X", opcode);
     }
 }
 
-void emulateCycle(void) {
+void emulate_cycle(void) {
     //Gets the first half of a opcode, shifts to the left to make space and sets the second half using OR bitmask
     opcode = (memory[pc] << 8) | memory[pc + 1];
     pc += 2;
+    executeOpcode();
 
     if (delay_tmr > 0)
         delay_tmr--;
@@ -274,4 +282,39 @@ void run_tests(bool run) {
         else
             printf("RNG Test failed\n");
     }
+}
+
+void print_debug(void) {
+    cycle++;
+    printf("Cycle: %d\n", cycle);
+    int n = 0;
+    printf("PC: %04X\n", pc);
+    printf("I: %04X\n", index_reg);
+    printf("Opcode: %04X\n", opcode);
+
+    printf("Delay Timer: %02X\n", delay_tmr);
+    printf("Sound Timer: %02X\n", sound_tmr);
+
+    printf("Stack Pointer: %02X\n", stack_ptr);
+
+    printf("Stack: \n");
+    n = 16;
+    for (int i = 0; i < n; i++)
+        if (stack[i])
+            printf("%X: %02X\n", i, stack[i]);
+
+    printf("Registers: \n");
+    n = 16;
+    for (int i = 0; i < n; i++)
+        printf("V%X: %02X\n", i, registers[i]);
+
+    for (int i = 0; i < 16; i++) {
+        printf("%x: %d\n", i, keypad[i]);
+    }
+
+    /*printf("Memory:\n");
+    n = 4096;
+    for (int i = 0; i < n; i++)
+        printf("%02X", memory[i]);
+    printf("\n");*/
 }

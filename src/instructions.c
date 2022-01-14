@@ -9,12 +9,12 @@
 
 //Shifting value to the right to place register argument at the right bit, otherwise value would be much bigger
 int get_vx(void) {
-    int vx = opcode & 0x0F00 >> 8;
+    int vx = (opcode & 0x0F00) >> 8;
     return vx;
 }
 
 int get_vy(void) {
-    int vy = opcode & 0x00F0 >> 4;
+    int vy = (opcode & 0x00F0) >> 4;
     return vy;
 }
 
@@ -160,8 +160,6 @@ void op_Dxyn(void) {
     uint8_t sprite_height = opcode & 0x000F;
 
     const int BYTE_WIDTH = 8;
-    const int VIDEO_WIDTH = 64;
-    const int VIDEO_HEIGHT = 32;
 
     for (size_t row = 0; row < sprite_height; row++) {
         uint8_t sprite_byte = memory[index_reg + row];
@@ -169,15 +167,18 @@ void op_Dxyn(void) {
             //Pointer to value to avoid repetition
             //This is for selecting array elements as if it was a 2d array
             unsigned int *video_pixel = &video[VIDEO_WIDTH * ((ypos + row) % VIDEO_HEIGHT) + ((xpos + col) % VIDEO_WIDTH)];
-            //Gets current value for comparison
-            unsigned int cur_pixel = *video_pixel;
             //ANDing to isolate pixel bit
             unsigned int sprite_pixel = sprite_byte & (0x80 >> col);
+            //Setting it to max int for XORing with the video pixel
+            if (sprite_pixel) {
+                sprite_pixel = 0xFFFFFFFF;
+                //Setting VF register if there's a collision
+                registers[0xF] = 0;
+                if (*video_pixel)
+                    registers[0xF] = 1;
+            }
 
             *video_pixel = *video_pixel ^ sprite_pixel;
-
-            //Setting VF register if there's a collision
-            registers[0xF] = (cur_pixel != *video_pixel && *video_pixel == 0) ? 1 : 0;
         }
     }
 }
@@ -203,7 +204,7 @@ void op_Fx07(void) {
 void op_Fx0A(void) {  //LD Vx, K
     const int KEYPAD_COUNT = 16;
     //Checks if any of the keys are pressed
-    for (size_t key_val = 0; key_val < KEYPAD_COUNT; key_val++) {
+    for (int key_val = 0; key_val < KEYPAD_COUNT; key_val++) {
         if (keypad[key_val]) {
             registers[get_vx()] = key_val;
             return;
