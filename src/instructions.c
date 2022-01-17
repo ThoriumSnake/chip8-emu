@@ -90,21 +90,19 @@ void op_8xy4(void) {  //ADD Vx, Vy
     int vx = get_vx();
     int vy = get_vy();
     int add = registers[vx] + registers[vy];
-    if (add > 255) {
-        registers[vx] = 255;
+    registers[vx] = add % 256;
+    if (add > 255)
         registers[0xF] = 0x01;
-    } else {
-        registers[vx] = add;
+    else
         registers[0xF] = 0x00;
-    }
 }
 
 void op_8xy5(void) {  //SUB Vx, Vy
     int vx = get_vx();
     int vy = get_vy();
-    int burrow = registers[vx] > registers[vy];
-    registers[0xF] = !burrow;
-    registers[vx] -= registers[vy];
+    int borrow = registers[vx] > registers[vy];
+    registers[0xF] = borrow;
+    registers[vx] = registers[vx] - registers[vy];
 }
 
 void op_8xy6(void) {  //SHR Vx {, Vy}
@@ -118,8 +116,8 @@ void op_8xy6(void) {  //SHR Vx {, Vy}
 void op_8xy7(void) {
     int vx = get_vx();
     int vy = get_vy();
-    int burrow = registers[vx] < registers[vy];
-    registers[0xF] = !burrow;
+    int borrow = registers[vy] > registers[vx];
+    registers[0xF] = borrow;
     registers[vx] = registers[vy] - registers[vx];
 }
 
@@ -148,10 +146,9 @@ void op_Bnnn(void) {
 }
 
 void op_Cxnn(void) {
-    int vx = opcode & 0x0F00;
     uint8_t value = opcode & 0x00FF;
     uint8_t random = capped_rng(255);
-    registers[vx] = value & random;
+    registers[get_vx()] = value & random;
 }
 
 void op_Dxyn(void) {
@@ -230,7 +227,8 @@ void op_Fx29(void) {  //LD F, Vx
     int vx_char = registers[get_vx()];
     //The separation between each character in the fontset array
     int const FONT_SIZE = 5;
-    index_reg = memory[vx_char * FONT_SIZE];
+    //Getting the position of the character sprite in the memory array
+    index_reg = (vx_char * FONT_SIZE) + FONTSET_START_ADDRESS;
 }
 
 void op_Fx33(void) {
