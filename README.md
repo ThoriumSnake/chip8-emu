@@ -14,3 +14,11 @@ Some resources you may find useful in your own endeavours:
 According to [this post](https://old.reddit.com/r/programming/comments/3ca4ry/writing_a_chip8_interpreteremulator_in_c14_10/csu7w8k/) Cowgod's reference has some inaccuracies and recommends [Mastering Chip-8](https://github.com/mattmikolay/chip-8/wiki/Mastering-CHIP%E2%80%908)
 
 [How to write an emulator (CHIP-8 interpreter)](https://multigesture.net/articles/how-to-write-an-emulator-chip-8-interpreter/) for a summary
+
+## Usage
+
+chip8 \<ROM PATH> \<FRAME LENGTH IN MILISECONDS> \<VIDEO SCALE>
+
+## Building
+
+Simply run ```make``` in the chip8-emu folder
